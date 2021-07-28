@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 
 @SpringBootApplication
@@ -24,31 +25,35 @@ public class Demo {
 		SpringApplication.run(Demo.class, args);
 	}
 
+	// amount should carry the decimal of 8, that is, input 10_00000000 for 10 nneo
+	// You should call the mint function first to convert utxo-neo to nneo
 	@PostMapping("/migrate")
-	public void migrateToken(@RequestParam int amount){
+	public String migrateToken(@RequestParam long amount){
 		try {
 			ContractInvocation invoc = new ContractInvocation.Builder(config.neow3j())
 					.contractScriptHash(config.proxyHash())
 					.function("lock")
 					.parameters(Arrays.asList(
-							ContractParameter.byteArray(config.nNeoHash().toArray()),// asset to be transferred
-							ContractParameter.byteArrayFromAddress(config.account().getAddress()), //sender's address in little-endian
+							ContractParameter.hash160(config.nNeoHash()),// asset to be transferred
+							ContractParameter.hash160(config.account().getScriptHash()), //sender's address in little-endian
 							ContractParameter.integer(Integer.valueOf(config.getN3Id())), // N3 chainId
-							ContractParameter.byteArray(config.N3ReceiveAddress()), // recipient's address in little-endian
-							ContractParameter.integer(amount) //asset amount to be locked
+							ContractParameter.hash160(config.N3ReceiveAddress()), // recipient's address in little-endian
+							ContractParameter.integer(BigInteger.valueOf(amount)), //asset amount to be locked
+							ContractParameter.integer(Integer.valueOf(config.getProjectIndex()))
 					))
 					.account(config.account())
 					.build()
-					.sign();
-
-				invoc.invoke();
+					.sign()
+					.invoke();
+			return invoc.getTransaction().getTxId();
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 		}
+		return "";
 	}
 
 	@PostMapping("/mint")
-	public void mintToken(@RequestParam double lockValue){
+	public String mintToken(@RequestParam double lockValue){
 		try {
 			config.account().updateAssetBalances(config.neow3j());
 			ContractInvocation invoc = new ContractInvocation.Builder(config.neow3j())
@@ -59,8 +64,10 @@ public class Demo {
 					.build()
 					.sign()
 					.invoke();
+			return invoc.getTransaction().getTxId();
 		}catch (Exception e) {
 			System.out.println(e.getMessage());
 		}
+		return "";
 	}
 }
